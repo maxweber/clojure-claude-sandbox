@@ -18,20 +18,23 @@ Arguments:
   PROJECT_DIR    Path to the project directory to mount in the container
 
 Options:
-  -n, --name NAME   Container name (default: auto-generated from project dir)
-  -p, --port PORT   Host port for nREPL (default: auto-discover)
-  --daemon          Start in daemon mode
-  -h, --help        Show this help message
+  -n, --name NAME          Container name (default: auto-generated from project dir)
+  -p, --port PORT          Host port for nREPL (default: auto-discover)
+  -c, --claude-config DIR  Claude config directory (default: ~/.claude)
+  --daemon                 Start in daemon mode
+  -h, --help               Show this help message
 
 The script will:
   1. Find an available non-privileged port on the host (or use specified port)
   2. Write the port number to PROJECT_DIR/.nrepl-port
   3. Start the container with PROJECT_DIR mounted at /workspace
-  4. Forward the host port to container port ${CONTAINER_NREPL_PORT} for nREPL
+  4. Mount Claude config directory to /home/ralph/.claude
+  5. Forward the host port to container port ${CONTAINER_NREPL_PORT} for nREPL
 
 Examples:
   $(basename "$0") ~/projects/my-clojure-app
   $(basename "$0") --name my-repl --port 7888 ~/projects/my-app
+  $(basename "$0") --claude-config ~/.claude-work ~/projects/my-app
   $(basename "$0") --shell ~/projects/my-app
 EOF
 }
@@ -58,6 +61,7 @@ CONTAINER_NAME=""
 HOST_PORT=""
 START_SHELL=true
 PROJECT_DIR=""
+CLAUDE_CONFIG_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -67,6 +71,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -p|--port)
             HOST_PORT="$2"
+            shift 2
+            ;;
+        -c|--claude-config)
+            CLAUDE_CONFIG_DIR="$2"
             shift 2
             ;;
         --daemon)
@@ -149,21 +157,28 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     fi
 fi
 
+# Set default Claude config directory if not specified
+if [ -z "$CLAUDE_CONFIG_DIR" ]; then
+    CLAUDE_CONFIG_DIR="$HOME/.claude"
+fi
+
+# Convert to absolute path and check if it exists
+if [ -d "$CLAUDE_CONFIG_DIR" ]; then
+    CLAUDE_CONFIG_DIR=$(cd "$CLAUDE_CONFIG_DIR" && pwd)
+    CLAUDE_MOUNT_ARGS="-v $CLAUDE_CONFIG_DIR:/home/ralph/.claude -e CLAUDE_CONFIG_DIR=/home/ralph/.claude"
+    CLAUDE_STATUS="$CLAUDE_CONFIG_DIR -> /home/ralph/.claude"
+else
+    CLAUDE_MOUNT_ARGS=""
+    CLAUDE_STATUS="not found - Claude will need to be configured in container"
+fi
+
 # Start container
 echo "Starting container '$CONTAINER_NAME'..."
-echo "  Project dir: $PROJECT_DIR"
-echo "  Workspace:   /workspace"
-echo "  Claude config: ~/.claude -> /root/.claude"
-echo "  nREPL port:  localhost:$HOST_PORT -> container:$CONTAINER_NREPL_PORT"
-
-# Check if ~/.claude directory exists
-CLAUDE_CONFIG_DIR="$HOME/.claude"
-CLAUDE_MOUNT_ARGS=""
-if [ -d "$CLAUDE_CONFIG_DIR" ]; then
-    CLAUDE_MOUNT_ARGS="-v $CLAUDE_CONFIG_DIR:/root/.claude"
-else
-    echo "  Note: ~/.claude not found - Claude will need to be configured in container"
-fi
+echo "  Project dir:   $PROJECT_DIR"
+echo "  Workspace:     /workspace"
+echo "  Claude config: $CLAUDE_STATUS"
+echo "  nREPL port:    localhost:$HOST_PORT -> container:$CONTAINER_NREPL_PORT"
+echo "  User:          ralph (with sudo)"
 
 if [ "$START_SHELL" = true ]; then
     # Interactive shell mode

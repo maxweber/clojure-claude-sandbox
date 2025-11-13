@@ -32,6 +32,22 @@ Docker image combining Clojure development tools with Node.js ecosystem and Clau
 
 ## Quick Start
 
+### Prerequisites
+
+Before using the container, ensure you have authenticated Claude Code on your host machine:
+
+```bash
+# Install Claude Code CLI on your Mac (if not already installed)
+npm install -g @anthropic-ai/claude-code
+
+# Login with your Claude subscription
+claude login
+
+# This creates ~/.claude with your credentials
+```
+
+**For multiple accounts:** You can maintain different Claude config directories (e.g., `~/.claude-work`, `~/.claude-personal`) and use the `--claude-config` option to specify which account to use.
+
 ### Option 1: Using the Container Startup Script (Recommended)
 
 ```bash
@@ -49,8 +65,10 @@ The script will:
 - Find an available nREPL port (default: 7888-8888 range)
 - Write the port to `PROJECT_DIR/.nrepl-port`
 - Mount your project at `/workspace`
-- Mount your `~/.claude` directory to `/root/.claude` (preserves your Claude subscription/config)
+- Mount your Claude config directory to `/home/ralph/.claude` (default: `~/.claude`)
+  - Use `--claude-config` to specify an alternate directory for different accounts
 - Forward the nREPL port from container to host
+- Start as user `ralph` with sudo access
 
 ### Option 2: Manual Docker Commands
 
@@ -64,7 +82,7 @@ docker run -it --rm tonykayclj/clojure-node-claude:latest
 # Mount your project directory with nREPL port and Claude config
 docker run -it --rm \
   -v $(pwd):/workspace \
-  -v ~/.claude:/root/.claude \
+  -v ~/.claude:/home/ralph/.claude \
   -w /workspace \
   -p 7888:7888 \
   tonykayclj/clojure-node-claude:latest
@@ -242,10 +260,12 @@ The `scripts/start-dev-container.sh` script provides a convenient way to start d
 start-dev-container.sh [OPTIONS] PROJECT_DIR
 
 Options:
-  -n, --name NAME    Container name (default: auto-generated from project dir)
-  -p, --port PORT    Host port for nREPL (default: auto-discover)
-  --shell           Start an interactive shell instead of daemon mode
-  -h, --help        Show help message
+  -n, --name NAME          Container name (default: auto-generated from project dir)
+  -p, --port PORT          Host port for nREPL (default: auto-discover)
+  -c, --claude-config DIR  Claude config directory (default: ~/.claude)
+  --daemon                 Start in daemon mode
+  --shell                  Start an interactive shell instead of daemon mode
+  -h, --help               Show help message
 
 Examples:
   # Start container in daemon mode
@@ -253,6 +273,9 @@ Examples:
 
   # Start with custom name and port
   start-dev-container.sh --name my-repl --port 7890 ~/projects/my-app
+
+  # Use alternate Claude config (for different accounts)
+  start-dev-container.sh --claude-config ~/.claude-work ~/projects/my-app
 
   # Interactive shell mode
   start-dev-container.sh --shell ~/projects/my-app
@@ -359,7 +382,7 @@ docker run --rm -v $(pwd):/app -w /app tonykayclj/clojure-node-claude:latest nod
 ```bash
 docker run -it --rm \
   -v $(pwd):/workspace \
-  -v ~/.claude:/root/.claude \
+  -v ~/.claude:/home/ralph/.claude \
   -w /workspace \
   tonykayclj/clojure-node-claude:latest \
   claude
@@ -369,17 +392,17 @@ docker run -it --rm \
 ```bash
 docker run -it --rm \
   -v $(pwd):/workspace \
-  -v ~/.claude:/root/.claude \
+  -v ~/.claude:/home/ralph/.claude \
   -w /workspace \
   tonykayclj/clojure-node-claude:latest \
-  ccode
+  bash -c 'source ~/.bashrc && ccode'
 ```
 
 ### Development Environment with nREPL
 ```bash
 docker run -it --rm \
   -v $(pwd):/workspace \
-  -v ~/.claude:/root/.claude \
+  -v ~/.claude:/home/ralph/.claude \
   -w /workspace \
   -p 7888:7888 \
   -p 3000:3000 \
