@@ -39,11 +39,44 @@ Bash script (v1.0.0) that simplifies starting development containers:
 - Mounts project directory at `/workspace`
 - Mounts Claude config directory to `/home/ralph/.claude`
 - Supports custom container names, ports, and Claude config directories
+- Supports `--playwright PORT` flag for forwarding Playwright/CDP connections
 - Offers both interactive shell and daemon modes
 
 ### Configuration Files
 - `.cljfmt.edn` - Code formatting configuration with 2-space indentation (matching IntelliJ/Cursive defaults) and aligned map columns
 - `scripts/resources/.cljfmt.edn` - Template cljfmt config copied to new projects
+
+## Playwright Integration
+
+This image supports browser automation via Playwright MCP by running the MCP server on the host Mac with network transport. Playwright does not officially support Alpine Linux on ARM64, so the MCP server and browsers run on the host, and the container connects via HTTP/SSE.
+
+### Architecture
+
+1. **Run Playwright MCP Server on Mac** with `--port` flag for network transport
+2. **Forward Port** using `--playwright` flag when starting container
+3. **Container Connects** via `http://host.docker.internal:PORT/sse`
+
+### Two Modes
+
+**Headless Mode** (automated testing/scraping):
+- Command: `npx @playwright/mcp@latest --port 8931`
+- Launches fresh browser instances
+- No logged-in state or cookies
+- Use `--playwright 8931` flag when starting container
+
+**Extension Mode** (logged-in sessions):
+- Command: `npx @playwright/mcp@latest --extension --port 8931`
+- Requires Playwright MCP Bridge Chrome extension
+- Access to logged-in sessions, cookies, browser state
+- Tab selection UI on first interaction
+- Use `--playwright 8931` flag when starting container
+
+### Network Architecture
+
+- The `--playwright PORT` flag adds `-p PORT:PORT` to docker run command
+- From inside container, MCP clients connect to `http://host.docker.internal:PORT/sse`
+- Port forwarding is bidirectional
+- Default MCP server port is 8931 (customizable)
 
 ## Common Development Tasks
 
@@ -68,6 +101,9 @@ docker run --rm tonykayclj/clojure-node-claude:latest bash -c \
 
 # With custom options
 ./scripts/start-dev-container.sh --name my-repl --port 7890 ~/projects/my-app
+
+# With Playwright support (MCP server with --port)
+./scripts/start-dev-container.sh --playwright 8931 ~/projects/my-app
 
 # Using alternate Claude config (for different accounts)
 ./scripts/start-dev-container.sh --claude-config ~/.claude-work ~/projects/my-app

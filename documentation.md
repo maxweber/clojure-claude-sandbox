@@ -252,6 +252,142 @@ RUN node --version && \
     claude-setup-clojure --help
 ```
 
+## Playwright Integration
+
+The container supports browser automation via Playwright MCP servers. Due to Alpine ARM64 compatibility limitations, we run the Playwright MCP server on your Mac and the container connects to it over the network.
+
+### Why Remote Playwright MCP?
+
+Playwright doesn't officially support Alpine Linux on ARM64, so running browsers directly in the container requires complex workarounds. Running the MCP server on your Mac provides:
+- ✅ Keeps the container lightweight
+- ✅ Full browser compatibility (Chromium, Firefox, WebKit)
+- ✅ Access to your logged-in browser sessions (with Chrome extension)
+- ✅ Works reliably without Alpine/musl compatibility issues
+- ✅ Simple network-based architecture
+
+### Setup
+
+#### 1. Install Prerequisites on Your Mac (One-Time)
+
+Install the Playwright MCP package:
+```bash
+npm install -g @playwright/mcp
+```
+
+**For headless browsers only**, install Playwright:
+```bash
+npx playwright install chromium
+```
+
+**For logged-in sessions**, install the Playwright MCP Bridge extension:
+- Download from: https://github.com/microsoft/playwright-mcp/releases
+- Unzip the file
+- Open `chrome://extensions/` in Chrome
+- Enable "Developer mode" (top right toggle)
+- Click "Load unpacked" and select the extension folder
+
+#### 2. Start the Playwright MCP Server on Your Mac
+
+**For headless browsers** (automated testing/scraping):
+```bash
+npx @playwright/mcp@latest --port 8931
+```
+
+**For logged-in sessions** (uses your Chrome cookies/sessions):
+```bash
+npx @playwright/mcp@latest --extension --port 8931
+```
+
+Keep this running in a terminal. You should see output indicating the server is listening on port 8931.
+
+When using `--extension`, the first time the MCP server interacts with the browser, the extension will display a tab selection interface where you can choose which browser tab to control.
+
+#### 3. Start Your Container with Port Forwarding
+
+```bash
+./scripts/start-dev-container.sh --playwright 8931 ~/projects/my-app
+```
+
+#### 4. Configure MCP Client Inside the Container
+
+In your MCP client configuration (e.g., Claude Desktop, Cline), use the network transport:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "url": "http://host.docker.internal:8931/sse"
+    }
+  }
+}
+```
+
+The `host.docker.internal` hostname automatically resolves to your Mac from inside the container.
+
+### Startup Script Options
+
+The `--playwright` flag forwards the specified port for Playwright MCP connectivity:
+
+```bash
+# Basic usage with default port
+./scripts/start-dev-container.sh --playwright 8931 ~/projects/my-app
+
+# Combined with other options
+./scripts/start-dev-container.sh \
+  --name my-dev \
+  --port 7888 \
+  --playwright 8931 \
+  --claude-config ~/.claude \
+  ~/projects/my-app
+```
+
+### Headless vs Extension Mode
+
+| Feature | Headless Mode | Extension Mode |
+|---------|---------------|----------------|
+| Command | `npx @playwright/mcp@latest --port 8931` | `npx @playwright/mcp@latest --extension --port 8931` |
+| Browser | Launches fresh browser | Uses your existing Chrome |
+| Sessions | No logged-in state | Access to logged-in sessions |
+| Cookies | None | Your existing cookies |
+| Use Case | Automated testing/scraping | Testing authenticated workflows |
+| Extension Required | No | Yes |
+
+### Security Considerations
+
+**MCP Server Port (8931)**:
+- Only binds to localhost by default (safe)
+- Provides browser control via HTTP/SSE
+- Don't expose to external networks
+- Port number is customizable
+
+**Extension Mode**:
+- Grants MCP server access to your logged-in browser sessions
+- Only use when you need authenticated access
+- Review which tab you're selecting when the UI prompts you
+
+### Troubleshooting Playwright
+
+**"Connection refused" errors**:
+- Ensure the Playwright MCP server is running on your Mac
+- Verify the port number (8931) matches between server and `--playwright` flag
+- Check that no firewall is blocking localhost connections
+- Confirm the server started successfully (check terminal output)
+
+**Extension not working**:
+- Verify the extension is installed and enabled in `chrome://extensions/`
+- Make sure Chrome is running when you start the MCP server
+- Check the extension shows up when you start the server with `--extension`
+- Look for the tab selection UI on first browser interaction
+
+**MCP client can't connect**:
+- Use `http://host.docker.internal:8931/sse` not `http://localhost:8931/sse`
+- Verify port forwarding: `docker port <container-name>`
+- Check the MCP server is using `--port` flag (required for network transport)
+
+**Wrong browser/tab being controlled**:
+- The extension shows a tab selector on first use - choose carefully
+- Restart the MCP server to get a new tab selection prompt
+
 ## Container Startup Script
 
 The `scripts/start-dev-container.sh` script provides a convenient way to start development containers:
@@ -262,6 +398,7 @@ start-dev-container.sh [OPTIONS] PROJECT_DIR
 Options:
   -n, --name NAME          Container name (default: auto-generated from project dir)
   -p, --port PORT          Host port for nREPL (default: auto-discover)
+  -w, --playwright PORT    Host port for Playwright server (optional)
   -c, --claude-config DIR  Claude config directory (default: ~/.claude)
   --daemon                 Start in daemon mode
   --shell                  Start an interactive shell instead of daemon mode
@@ -273,6 +410,9 @@ Examples:
 
   # Start with custom name and port
   start-dev-container.sh --name my-repl --port 7890 ~/projects/my-app
+
+  # With Playwright support
+  start-dev-container.sh --playwright 8931 ~/projects/my-app
 
   # Use alternate Claude config (for different accounts)
   start-dev-container.sh --claude-config ~/.claude-work ~/projects/my-app
@@ -511,4 +651,4 @@ For x86_64 support, the Dockerfile would need minor modifications (mainly the pa
 
 ## License
 
-This Dockerfile is provided as-is for community use.
+MIT License
