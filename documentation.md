@@ -310,13 +310,14 @@ When using `--extension`, the first time the MCP server interacts with the brows
 
 #### 4. Configure MCP Client Inside the Container
 
-In your MCP client configuration (e.g., Claude Desktop, Cline), use the network transport:
+In your MCP client configuration (e.g., Claude Desktop, Cline), use the network transport by adding what the playwright server output. Something
+like this:
 
 ```json
 {
   "mcpServers": {
     "playwright": {
-      "url": "http://host.docker.internal:8931/sse"
+      "url": "http://host.docker.internal:8931/mcp"
     }
   }
 }
@@ -380,7 +381,7 @@ The `--playwright` flag forwards the specified port for Playwright MCP connectiv
 - Look for the tab selection UI on first browser interaction
 
 **MCP client can't connect**:
-- Use `http://host.docker.internal:8931/sse` not `http://localhost:8931/sse`
+- Use `http://host.docker.internal:8931/mcp` not `http://localhost:8931/mcp`
 - Verify port forwarding: `docker port <container-name>`
 - Check the MCP server is using `--port` flag (required for network transport)
 
