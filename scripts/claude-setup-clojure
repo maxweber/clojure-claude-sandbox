@@ -24,9 +24,10 @@
   (println "  --help, -h         Show this help message")
   (println)
   (println "Creates:")
-  (println "  .claude/settings.local.json  - Hook configuration for parinfer and cljfmt")
-  (println "  .cljfmt.edn                  - Code formatting configuration (if missing)")
-  (println "  .claude/commands/*.md        - Slash commands for nREPL evaluation")
+  (println "  .claude/settings.local.json          - Hook configuration for parinfer and cljfmt")
+  (println "  .cljfmt.edn                          - Code formatting configuration (if missing)")
+  (println "  .claude/commands/*.md                - Slash commands for nREPL evaluation")
+  (println "  .claude/skills/clojure-repl/SKILL.md - Autonomous REPL management skill")
   (println)
   (println "Examples:")
   (println "  claude-setup-clojure                    # Setup with defaults")
@@ -140,6 +141,54 @@ npx shadow-cljs watch app
 
 The nREPL server starts automatically with shadow-cljs.")
 
+(defn clojure-repl-skill []
+  "---
+name: clojure-repl
+description: Automatically manage and use nREPL servers to run/evaluate Clojure code and tests.
+---
+
+# Clojure REPL Management
+
+Automatically handle all Clojure REPL operations without requiring manual commands from the user.
+
+## Core Capabilities
+
+### 1. Starting nREPL
+
+**Before starting the nREPL**, check the project's `deps.edn` file to determine which aliases to include:
+- If the project has a `:test` alias, include it with `-A:test`
+- If the project has a `:dev` alias, include it with `-A:dev`
+- Always include the nREPL alias (e.g., `:test-nrepl` or `:nrepl`)
+
+Common patterns:
+- For projects with `:test` and `:test-nrepl` aliases: `clojure -A:test -M:test-nrepl`
+- For projects with `:dev` and `:nrepl` aliases: `clojure -A:dev -M:nrepl`
+- For projects with both `:test` and `:dev`: `clojure -A:test:dev -M:nrepl`
+- For minimal projects: `clojure -M:nrepl`
+
+Use bash to run this in the background. The nREPL server will:
+- Start on an available port (written to `.nrepl-port`)
+
+If you detect that the repl is malfunctioning, kill the background process and start a new one.
+
+### 2. Code Evaluation
+
+There is a CLI tool called `clj-nrepl-eval`. You can use that to send clojure expressions to the running REPL:
+
+```bash
+clj-nrepl-eval --timeout 60000 -p $(cat .nrepl-port)  <<'EOF'
+(def x 10)
+(+ x 20)
+EOF
+```
+
+If you want to attempt to reset the session, you can try:
+
+```bash
+clj-nrepl-eval -p $(cat .nrepl-port) --reset-session
+```
+")
+
 (defn file-exists? [path]
   (.exists (io/file path)))
 
@@ -219,6 +268,16 @@ The nREPL server starts automatically with shadow-cljs.")
           (when (or (not nrepl-exists?) (:force opts))
             (write-file! nrepl-path (start-nrepl-command) (:dry-run opts))))))
 
+    ;; Handle skills
+    (let [skills-dir ".claude/skills/clojure-repl"]
+      (when-not (:dry-run opts)
+        (.mkdirs (io/file skills-dir)))
+
+      (let [skill-path (str skills-dir "/SKILL.md")
+            skill-exists? (file-exists? skill-path)]
+        (when (or (not skill-exists?) (:force opts))
+          (write-file! skill-path (clojure-repl-skill) (:dry-run opts)))))
+
     (println)
     (if (:dry-run opts)
       (println "Dry run complete. Run without --dry-run to create files.")
@@ -226,8 +285,9 @@ The nREPL server starts automatically with shadow-cljs.")
 
     (println)
     (println "Next steps:")
-    (println "  1. Start an nREPL server (see .claude/commands/start-nrepl.md)")
-    (println "  2. Use Claude Code - hooks will automatically fix Clojure delimiters")
-    (println "  3. Use /clojure-eval to evaluate code in your running REPL")))
+    (println "  1. Claude Code can now autonomously manage nREPL via the clojure-repl skill")
+    (println "  2. Hooks will automatically fix Clojure delimiters when writing/editing code")
+    (println "  3. Use /clojure-eval to manually evaluate code in your REPL")
+    (println "  4. Or use /start-nrepl for instructions on starting nREPL manually")))
 
 (apply main *command-line-args*)

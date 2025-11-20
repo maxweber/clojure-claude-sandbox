@@ -19,9 +19,11 @@ Multi-stage Docker build that creates a Clojure development environment with:
 
 The Dockerfile uses multi-stage builds to:
 1. **parinfer-builder stage**: Compiles parinfer-rust from source (required for ARM64)
-2. **node-builder stage**: Installs Claude Code CLI and Node.js packages
+2. **node-builder stage**: Provides Node.js runtime
 3. **babashka stage**: Copies Babashka binary from official image
 4. **Final stage**: Combines everything with Alpine Linux for minimal size
+
+**Build Metadata**: The image includes OCI labels with version, git commit hash, and build date for version tracking.
 
 ### Claude Setup Script (`scripts/claude-setup-clojure`)
 Babashka script (v1.0.0) that configures Clojure projects for Claude Code. Creates:
@@ -88,8 +90,34 @@ This image supports browser automation via Playwright MCP by running the MCP ser
 ## Common Development Tasks
 
 ### Building the Docker Image
+Use the build script to create images with proper metadata:
 ```bash
-docker build -t tonykayclj/clojure-node-claude:latest .
+# Build with default settings (latest tag, version 1.0.0)
+./scripts/build-image.sh
+
+# Build with custom version
+VERSION=1.1.0 ./scripts/build-image.sh
+
+# Build with custom image name and tag
+IMAGE_NAME=myrepo/clojure-dev TAG=v1.0.0 ./scripts/build-image.sh
+```
+
+The build script automatically captures:
+- Git commit hash (VCS_REF)
+- Build timestamp (BUILD_DATE)
+- Version number (VERSION)
+
+### Checking Image Metadata
+```bash
+# View all labels
+docker inspect tonykayclj/clojure-node-claude:latest -f '{{json .Config.Labels}}' | jq
+
+# Check specific version
+docker inspect tonykayclj/clojure-node-claude:latest -f '{{.Config.Labels.version}}'
+
+# Compare published vs local build
+docker pull tonykayclj/clojure-node-claude:latest
+docker inspect tonykayclj/clojure-node-claude:latest -f '{{.Config.Labels.revision}}'
 ```
 
 ### Testing the Image Locally
@@ -127,6 +155,24 @@ claude-setup-clojure --force            # Overwrite existing config
 claude-setup-clojure --no-cljfmt-hook   # Disable cljfmt in hooks
 ```
 
+### Updating Claude Code
+Claude Code is installed in the ralph user's home directory (`~/.npm-global`), allowing updates without rebuilding the image:
+```bash
+# Inside the container
+npm update -g @anthropic-ai/claude-code
+
+# Check current version
+claude --version
+
+# Install specific version
+npm install -g @anthropic-ai/claude-code@1.2.3
+```
+
+This approach provides:
+- **Fast updates**: No Docker rebuild required
+- **User control**: Ralph user has full ownership
+- **Version flexibility**: Easy to test different versions
+
 ## Architecture and Design Patterns
 
 ### Multi-Stage Build Strategy
@@ -144,7 +190,9 @@ This ordering minimizes cache invalidation during development.
 - Container runs as user `ralph` (not root) for better security
 - `ralph` has sudo access via NOPASSWD configuration
 - bbin packages install to `/home/ralph/.local/bin`
-- PATH configured in both `.bashrc` and `.profile` to include `/home/ralph/.local/bin`
+- npm global packages (including Claude Code) install to `/home/ralph/.npm-global`
+- PATH configured in both `.bashrc` and `.profile` to include both directories
+- Claude Code is user-owned, allowing updates without root privileges
 
 ### Hook System
 Claude Code hooks are configured to run `clj-paren-repair-claude-hook` at three points:
@@ -166,7 +214,7 @@ The startup script auto-discovers available ports in the 7888-8888 range and wri
 - Clojure CLI: 1.11.1.1435
 - Java/OpenJDK: 25 (Temurin)
 - Node.js: v20 (from official Node image)
-- Claude Code: Latest via npm global install
+- Claude Code: Latest via npm (installed in ralph's home, user-updatable)
 - Babashka: Latest (from official babashka image)
 - bbin: Latest (package manager for Babashka)
 
@@ -197,6 +245,7 @@ For x86_64 support, the Dockerfile would need modifications to the parinfer-rust
 ├── claude-setup.md                     # Original planning document
 ├── .cljfmt.edn                         # Default cljfmt configuration for this repo
 └── scripts/
+    ├── build-image.sh                  # Build script with metadata injection
     ├── claude-setup-clojure            # Babashka script to configure projects
     ├── start-dev-container.sh          # Bash script to start dev containers
     └── resources/
@@ -220,17 +269,19 @@ For x86_64 support, the Dockerfile would need modifications to the parinfer-rust
 ## Testing Changes
 
 When modifying the Dockerfile:
-1. Build image: `docker build -t tonykayclj/clojure-node-claude:latest .`
+1. Build image: `./scripts/build-image.sh` (includes metadata)
 2. Run verification: `docker run --rm tonykayclj/clojure-node-claude:latest bash -c 'node --version && claude --version && bb --version'`
-3. Test setup script: Create a test project directory and run `./scripts/start-dev-container.sh` with it
-4. Inside container, run `claude-setup-clojure --dry-run` to verify script functionality
+3. Check metadata: `docker inspect tonykayclj/clojure-node-claude:latest -f '{{json .Config.Labels}}' | jq`
+4. Test setup script: Create a test project directory and run `./scripts/start-dev-container.sh` with it
+5. Inside container, run `claude-setup-clojure --dry-run` to verify script functionality
 
 ## Environment Variables
 
-- `NVM_DIR`: Not currently used (nvm removed in favor of Node from official image)
-- `PATH`: Includes `/usr/local/bin` and `/home/ralph/.local/bin`
+- `NPM_CONFIG_PREFIX`: Set to `/home/ralph/.npm-global` for user-owned npm packages
+- `PATH`: Includes `/usr/local/bin`, `/home/ralph/.npm-global/bin`, and `/home/ralph/.local/bin`
 - `CLAUDE_CONFIG_DIR`: Set to `/home/ralph/.claude` by container startup script
 - `CONTAINER_NREPL_PORT`: Fixed at 7888 (container-side port)
+- `USE_BUILTIN_RIPGREP`: Set to 0 to use system ripgrep instead of Claude's bundled version
 
 ## Important Notes
 
