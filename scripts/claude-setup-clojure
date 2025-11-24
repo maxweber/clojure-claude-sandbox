@@ -202,6 +202,31 @@ clj-nrepl-eval -p $(cat .nrepl-port) --reset-session
 ```
 ")
 
+(defn custom-clojure-repl-skill []
+  "---
+name: clojure-repl
+description: Automatically manage and use nREPL servers to run/evaluate Clojure code and tests.
+---
+
+# Clojure REPL Management
+
+Automatically handle all Clojure REPL operations without requiring manual commands from the user.
+
+## Core Capabilities
+
+### 1. Code Evaluation
+
+There is a CLI tool called `clj-nrepl-eval`. You can use that to send clojure expressions to the running REPL:
+
+```bash
+clj-nrepl-eval --timeout 60000 -H dev-app -p 4000  <<'EOF'
+(def x 10)
+(+ x 20)
+EOF
+```
+")
+
+
 (defn file-exists? [path]
   (.exists (io/file path)))
 
@@ -289,7 +314,7 @@ clj-nrepl-eval -p $(cat .nrepl-port) --reset-session
       (let [skill-path (str skills-dir "/SKILL.md")
             skill-exists? (file-exists? skill-path)]
         (when (or (not skill-exists?) (:force opts))
-          (write-file! skill-path (clojure-repl-skill) (:dry-run opts)))))
+          (write-file! skill-path (custom-clojure-repl-skill) (:dry-run opts)))))
 
     (println)
     (if (:dry-run opts)
