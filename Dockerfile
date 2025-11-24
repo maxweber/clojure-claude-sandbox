@@ -117,6 +117,9 @@ RUN node --version && \
     claude --version && \
     /usr/local/bin/claude-setup-clojure --help
 
+RUN mkdir -p /home/ralph/.claude && \
+    chown -R ralph /home/ralph/
+
 # Set working directory and default user
 WORKDIR /home/ralph
 USER ralph
