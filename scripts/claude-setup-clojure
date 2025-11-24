@@ -100,6 +100,19 @@ Examples:
 (start!)
 ```")
 
+(defn custom-clojure-eval-command []
+  "# Clojure Eval
+
+Evaluate Clojure code in a running nREPL server.
+
+Then use this command to evaluate code against that server.
+
+You can use the following code to eval code in the app's Clojure REPL:
+
+    clj-nrepl-eval -H dev-app -p 4000 `(+ 1 2 3)`
+
+Please test it once to see if it works.")
+
 (defn start-nrepl-command []
   "# Start nREPL
 
@@ -261,7 +274,7 @@ clj-nrepl-eval -p $(cat .nrepl-port) --reset-session
         (let [eval-path (str commands-dir "/clojure-eval.md")
               eval-exists? (file-exists? eval-path)]
           (when (or (not eval-exists?) (:force opts))
-            (write-file! eval-path (clojure-eval-command) (:dry-run opts))))
+            (write-file! eval-path (custom-clojure-eval-command) (:dry-run opts))))
 
         (let [nrepl-path (str commands-dir "/start-nrepl.md")
               nrepl-exists? (file-exists? nrepl-path)]
